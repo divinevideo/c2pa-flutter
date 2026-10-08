@@ -356,7 +356,6 @@ class MockC2paPlatform extends C2paPlatform with MockPlatformInterfaceMixin {
       'ingredientJson': ingredientJson,
     });
     _checkError();
-    builders[handle]?.fileIngredients.add(path);
   }
 
   @override
@@ -756,7 +755,6 @@ class MockBuilder implements ManifestBuilder {
   String? remoteUrl;
   final Map<String, Uint8List> resources = {};
   final List<MockIngredient> ingredients = [];
-  final List<String> fileIngredients = [];
   final List<String> actions = [];
 
   bool _disposed = false;
