@@ -344,6 +344,19 @@ class MethodChannelC2pa extends C2paPlatform {
   }
 
   @override
+  Future<void> builderAddIngredientFromFile(
+    int handle,
+    String path,
+    String? ingredientJson,
+  ) async {
+    await methodChannel.invokeMethod<void>('builderAddIngredientFromFile', {
+      'handle': handle,
+      'path': path,
+      'ingredientJson': ingredientJson,
+    });
+  }
+
+  @override
   Future<void> builderAddAction(int handle, String actionJson) async {
     await methodChannel.invokeMethod<void>('builderAddAction', {
       'handle': handle,
@@ -919,6 +932,19 @@ class MethodChannelManifestBuilder implements ManifestBuilder {
   }
 
   @override
+  Future<void> addIngredientFromFile({
+    required String path,
+    IngredientConfig? config,
+  }) async {
+    _checkDisposed();
+    await _platform.builderAddIngredientFromFile(
+      _handle,
+      path,
+      config?.toJson(),
+    );
+  }
+
+  @override
   void addAction(ActionConfig action) {
     _checkDisposed();
     _pendingOperations.add({
@@ -969,6 +995,17 @@ class MethodChannelManifestBuilder implements ManifestBuilder {
     _checkDisposed();
     await _applyPendingOperations();
     return _platform.builderSign(_handle, sourceData, mimeType, signer);
+  }
+
+  @override
+  Future<void> signFile({
+    required String sourcePath,
+    required String destPath,
+    required C2paSigner signer,
+  }) async {
+    _checkDisposed();
+    await _applyPendingOperations();
+    await _platform.builderSignFile(_handle, sourcePath, destPath, signer);
   }
 
   @override

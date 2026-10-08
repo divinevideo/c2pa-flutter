@@ -1,3 +1,8 @@
+## Unreleased
+
+* Add `ManifestBuilder.addIngredientFromFile` and `ManifestBuilder.signFile`, which stream files natively so video ingredients and outputs no longer pass through Dart memory
+* Read file ingredients off the main thread on Android and iOS
+
 ## 0.0.3
 
 * Fix Android OOM crashes in file-based signing by replacing readBytes()/ByteArrayStream with FileStream

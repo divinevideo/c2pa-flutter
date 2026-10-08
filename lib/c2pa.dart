@@ -1098,6 +1098,16 @@ abstract class ManifestBuilder {
     IngredientConfig? config,
   });
 
+  /// Add an ingredient read from the file at [path].
+  ///
+  /// The file is streamed by the native layer rather than copied into Dart
+  /// memory, so large media can be used as an ingredient. The MIME type is
+  /// taken from the file extension.
+  Future<void> addIngredientFromFile({
+    required String path,
+    IngredientConfig? config,
+  });
+
   /// Add an action to the manifest
   void addAction(ActionConfig action);
 
@@ -1108,6 +1118,16 @@ abstract class ManifestBuilder {
   Future<BuilderSignResult> sign({
     required Uint8List sourceData,
     required String mimeType,
+    required C2paSigner signer,
+  });
+
+  /// Sign the manifest and embed it, streaming [sourcePath] to [destPath].
+  ///
+  /// Unlike [sign], neither file is loaded into Dart memory. Pending intent
+  /// and action changes are applied first, as they are for [sign].
+  Future<void> signFile({
+    required String sourcePath,
+    required String destPath,
     required C2paSigner signer,
   });
 

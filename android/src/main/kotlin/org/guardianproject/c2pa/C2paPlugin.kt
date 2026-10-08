@@ -700,27 +700,30 @@ class C2paPlugin : FlutterPlugin, MethodCallHandler {
             return
         }
 
-        try {
-            val builder = getBuilder(handle)
-            if (builder == null) {
-                result.error("INVALID_HANDLE", "Invalid builder handle", null)
-                return
-            }
+        val builder = getBuilder(handle)
+        if (builder == null) {
+            result.error("INVALID_HANDLE", "Invalid builder handle", null)
+            return
+        }
 
-            // Builder doesn't have addIngredientFile - read file and use addIngredient
-            val file = File(path)
-            val mimeType = getMimeTypeFromPath(path)
-            val stream = FileStream(file, FileStream.Mode.READ)
+        // Adding an ingredient reads and hashes the whole file, which takes
+        // seconds for a video, so it runs off the main thread.
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                builder.addIngredient(ingredientJson ?: "{}", mimeType, stream)
-            } finally {
-                stream.close()
+                val file = File(path)
+                val mimeType = getMimeTypeFromPath(path)
+                val stream = FileStream(file, FileStream.Mode.READ)
+                try {
+                    builder.addIngredient(ingredientJson ?: "{}", mimeType, stream)
+                } finally {
+                    stream.close()
+                }
+                mainScope.launch { result.success(null) }
+            } catch (e: C2PAError) {
+                mainScope.launch { result.error("C2PA_ERROR", e.message, null) }
+            } catch (e: Exception) {
+                mainScope.launch { result.error("ERROR", e.message, null) }
             }
-            result.success(null)
-        } catch (e: C2PAError) {
-            result.error("C2PA_ERROR", e.message, null)
-        } catch (e: Exception) {
-            result.error("ERROR", e.message, null)
         }
     }
 

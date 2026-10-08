@@ -752,12 +752,20 @@ public class C2paPlugin: NSObject, FlutterPlugin {
         let ext = (path as NSString).pathExtension.lowercased()
         let mimeType = mimeTypeForExtension(ext)
 
-        do {
-            let stream = try Stream(readFrom: URL(fileURLWithPath: path))
-            try builder.addIngredient(json: ingredientJson, format: mimeType, from: stream)
-            result(nil)
-        } catch {
-            result(FlutterError(code: "C2PA_ERROR", message: error.localizedDescription, details: nil))
+        // Adding an ingredient reads and hashes the whole file, which takes
+        // seconds for a video, so it runs off the main thread.
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let stream = try Stream(readFrom: URL(fileURLWithPath: path))
+                try builder.addIngredient(json: ingredientJson, format: mimeType, from: stream)
+                DispatchQueue.main.async {
+                    result(nil)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "C2PA_ERROR", message: error.localizedDescription, details: nil))
+                }
+            }
         }
     }
 
