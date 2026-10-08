@@ -474,19 +474,8 @@ class C2paPlugin : FlutterPlugin, MethodCallHandler {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val signer = createSignerAsync(signerMap)
-                    val sourceFile = File(sourcePath)
-                    val mimeType = getMimeTypeFromPath(sourcePath)
-                    val destFile = File(destPath)
-
                     val builder = Builder.fromJson(manifestJson)
-                    val sourceStream = FileStream(sourceFile, FileStream.Mode.READ)
-                    val destStream = FileStream(destFile, FileStream.Mode.READ_WRITE)
-                    try {
-                        builder.sign(mimeType, sourceStream, destStream, signer)
-                    } finally {
-                        sourceStream.close()
-                        destStream.close()
-                    }
+                    signFileWithBuilder(builder, sourcePath, destPath, signer)
 
                     builder.close()
                     signer.close()
@@ -710,9 +699,8 @@ class C2paPlugin : FlutterPlugin, MethodCallHandler {
         // seconds for a video, so it runs off the main thread.
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val file = File(path)
                 val mimeType = getMimeTypeFromPath(path)
-                val stream = FileStream(file, FileStream.Mode.READ)
+                val stream = openFileForReading(path)
                 try {
                     builder.addIngredient(ingredientJson ?: "{}", mimeType, stream)
                 } finally {
@@ -906,75 +894,52 @@ class C2paPlugin : FlutterPlugin, MethodCallHandler {
             return
         }
 
-        val signerType = signerMap["type"] as? String ?: "pem"
-
-        // Callback signers need async execution to avoid deadlock
-        if (signerType == "remote" || signerType == "callback") {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val signer = createSignerAsync(signerMap)
-                    val sourceFile = File(sourcePath)
-                    val mimeType = getMimeTypeFromPath(sourcePath)
-                    val destFile = File(destPath)
-
-                    val sourceStream = FileStream(sourceFile, FileStream.Mode.READ)
-                    val destStream = FileStream(destFile, FileStream.Mode.READ_WRITE)
-                    try {
-                        builder.sign(mimeType, sourceStream, destStream, signer)
-                    } finally {
-                        sourceStream.close()
-                        destStream.close()
-                    }
-
-                    signer.close()
-
-                    mainScope.launch {
-                        result.success(null)
-                    }
-                } catch (e: C2PAError) {
-                    mainScope.launch {
-                        result.error("C2PA_ERROR", e.message, null)
-                    }
-                } catch (e: Exception) {
-                    mainScope.launch {
-                        result.error("ERROR", e.message, null)
-                    }
-                }
-            }
-        } else {
+        // Signing hashes and rewrites the whole file, which takes seconds for a
+        // video, so it runs off the main thread for every signer type. Callback
+        // and remote signers also need this to avoid a deadlock.
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                val signer = createSigner(signerMap, result) ?: return
-                performBuilderSignFile(builder, sourcePath, destPath, signer, result)
-                signer.close()
+                val signer = createSignerAsync(signerMap)
+                try {
+                    signFileWithBuilder(builder, sourcePath, destPath, signer)
+                } finally {
+                    signer.close()
+                }
+                mainScope.launch { result.success(null) }
             } catch (e: C2PAError) {
-                result.error("C2PA_ERROR", e.message, null)
+                mainScope.launch { result.error("C2PA_ERROR", e.message, null) }
             } catch (e: Exception) {
-                result.error("ERROR", e.message, null)
+                mainScope.launch { result.error("ERROR", e.message, null) }
             }
         }
     }
 
-    private fun performBuilderSignFile(
+    private fun signFileWithBuilder(
         builder: Builder,
         sourcePath: String,
         destPath: String,
-        signer: Signer,
-        result: Result
+        signer: Signer
     ) {
-        val sourceFile = File(sourcePath)
         val mimeType = getMimeTypeFromPath(sourcePath)
-        val destFile = File(destPath)
-
-        val sourceStream = FileStream(sourceFile, FileStream.Mode.READ)
-        val destStream = FileStream(destFile, FileStream.Mode.READ_WRITE)
+        val sourceStream = openFileForReading(sourcePath)
         try {
-            builder.sign(mimeType, sourceStream, destStream, signer)
+            // WRITE truncates, so an existing file at destPath cannot leave
+            // stale bytes after the signed output. READ_WRITE does not.
+            val destStream = FileStream(File(destPath), FileStream.Mode.WRITE)
+            try {
+                builder.sign(mimeType, sourceStream, destStream, signer)
+            } finally {
+                destStream.close()
+            }
         } finally {
             sourceStream.close()
-            destStream.close()
         }
+    }
 
-        result.success(null)
+    // FileStream creates missing files by default, which would turn a wrong
+    // path into an empty file and an unclear C2PA error.
+    private fun openFileForReading(path: String): FileStream {
+        return FileStream(File(path), FileStream.Mode.READ, false)
     }
 
     private fun getMimeTypeFromPath(path: String): String {
